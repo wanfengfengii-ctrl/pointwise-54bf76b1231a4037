@@ -1,0 +1,130 @@
+{
+  "project": "minimum-cost rooted branching planner",
+  "summary": "branching.plan(n, root, edges) returns the cheapest acyclic set of upstream edges that reaches every node from the source, as the ascending original edge indices, or None when impossible.",
+  "documented_command": "python3 verify.py --json",
+  "cores": [
+    {
+      "name": "branching.plan",
+      "file": "branching.py",
+      "kind": "delivered core",
+      "language": "Python 3 (standard library only)",
+      "entrypoint": "import branching; branching.plan(n, root, edges)",
+      "contract": {
+        "inputs": "n in [1, 1000]; root in [0, n-1]; edges = up to 20000 triples (u, v, cost) with |cost| <= 10^12 integers; negative costs, self-loops, parallel edges allowed; inputs are never mutated",
+        "outputs": "(minimum_total_cost, ascending list of selected original edge indices) or None; n == 1 -> (0, []); the source has no incoming edge and every other node exactly one; selected edges are acyclic and reach every node from root",
+        "complexity": "O(n * (n + len(edges))) worst case; at most n-1 contraction rounds; no subset enumeration and no per-node independent cheapest-edge choice"
+      },
+      "algorithm": "Chu-Liu/Edmonds minimum arborescence with group-level edge sets, cycle detection on the selected-incoming-edge functional graph, cycle contraction with the incoming discount, and iterative expansion back to original edges",
+      "statistics_hook": "branching._solve(n, root, edges) returns (result, stats) with stats = {rounds, cycles, levels, lookups}; only used for reporting"
+    }
+  ],
+  "independent_oracles": [
+    {
+      "name": "brute_force",
+      "file": "verify.py",
+      "role": "ground truth for tiny graphs",
+      "method": "enumerates every combination of incoming edges for all non-source nodes and keeps the cheapest acyclic selection that reaches every node"
+    },
+    {
+      "name": "reference_cost",
+      "file": "verify.py",
+      "role": "cross-check for medium graphs",
+      "method": "separately written cost-only recursive textbook Edmonds contraction with fresh node ids each round; shares no bookkeeping with branching.py"
+    },
+    {
+      "name": "TestBruteForceCrossCheck",
+      "file": "test_branching.py",
+      "role": "curated unit-suite oracle",
+      "method": "its own exhaustive enumeration helper, independent of verify.py"
+    }
+  ],
+  "real_verification": {
+    "command": "python3 verify.py",
+    "json_command": "python3 verify.py --json",
+    "exit_code": 0,
+    "all_passed": true,
+    "last_run_summary": {
+      "unit_tests": "15 tests, 0 failures, 0 errors",
+      "differential_small": "12000 random graphs, 12000 exhaustive-optimum comparisons, 0 mismatches, 0 structurally invalid",
+      "differential_larger": "6000 random graphs up to n=9/m=16, 1575 exhaustive comparisons, 0 mismatches, 0 structurally invalid",
+      "reference_medium": "1000 random graphs with 2 <= n <= 60 and up to 250 edges, 0 mismatches against the independent recursive oracle",
+      "traceability": "all 6 demo scenarios trace every node back to the source through original input edges",
+      "scale": "n=1000, m=20000 at the documented maximum, all results structurally valid"
+    },
+    "what_is_actually_checked": [
+      "optimal total cost equal to an independent exhaustive/reference optimum",
+      "None exactly when no rooted branching exists",
+      "selected indices ascending, unique, and within range",
+      "exactly n-1 selected edges; source has no incoming edge; every other node has exactly one",
+      "selected edges are acyclic (supplied by the one-incoming-edge plus reachability checks) and every node is reachable from the source",
+      "reported total equals the sum of the original costs of the selected edges",
+      "input edges are not modified; tuple inputs accepted",
+      "traceability: each node's path through the selected original edges terminates at the source"
+    ],
+    "not_claimed": [
+      "no claim of matching any specific tie-breaking between multiple optimal solutions; ties resolve deterministically on the original edge index",
+      "no claim about behavior outside the documented input bounds"
+    ],
+    "scale_facts": [
+      {
+        "case": "dense random costs",
+        "n": 1000,
+        "m": 20000,
+        "rounds": 1,
+        "expansion_depth": 1,
+        "seconds": 0.011,
+        "valid": true
+      },
+      {
+        "case": "many negative 2-cycles",
+        "n": 1000,
+        "m": 20000,
+        "rounds": 44,
+        "expansion_depth": 44,
+        "seconds": 0.089,
+        "valid": true
+      },
+      {
+        "case": "sequential contraction cascade (worst case, one merge per round)",
+        "n": 1000,
+        "m": 20000,
+        "rounds": 998,
+        "expansion_depth": 998,
+        "seconds": 1.282,
+        "valid": true
+      }
+    ],
+    "note": "timings are wall-clock on the current machine and illustrative only; the measured growth of t/(n*(n+m)) stays roughly constant across n, consistent with the claimed bound"
+  },
+  "demos": [
+    {
+      "command": "python3 demo.py",
+      "file": "demo.py",
+      "covers": [
+        "specification example (cost 5, selects [1, 3])",
+        "negative costs where the more expensive cycle entry wins",
+        "entries into a cycle from inside and from outside",
+        "multi-level contraction (3 nested rounds, expansion depth 3)",
+        "self-loops and parallel edges never corrupting the plan",
+        "unreachable node -> None",
+        "n=1000, m=20000 scale measurements"
+      ],
+      "output_style": "per scenario: original edge list, selected original edges with indices and costs, per-node path of original edges to the source with path cost, structural audit, and an exhaustive brute-force cross-check where the graph is small"
+    },
+    {
+      "command": "python3 demo.py --quick",
+      "file": "demo.py",
+      "covers": "same scenarios without the large scale measurements"
+    },
+    {
+      "command": "python3 -m unittest -v test_branching",
+      "file": "test_branching.py",
+      "covers": "15 curated tests: spec examples, negative costs, cycle entries, nested contraction, self-loops, parallel edges, unreachable, input immutability, brute-force cross-check, maximum-size scale runs"
+    }
+  ],
+  "limits": {
+    "language": "Python 3 standard library only; no third-party packages",
+    "memory": "O(n + len(edges)) working state plus per-contraction group metadata, bounded by the number of contracted cycles",
+    "determinism": "identical input yields identical output (ties break on the smallest original edge index)"
+  }
+}
